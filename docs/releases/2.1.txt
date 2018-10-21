@@ -326,9 +326,9 @@ New default view permission could allow unwanted access to admin views
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If you have a custom permission with a codename of the form
-``can_view_<modelname>``, the new view permission handling in the admin will
-allow view access to the changelist and detail pages for those models. If this
-is unwanted, you must change your custom permission codename.
+``view_<modelname>``, the new view permission handling in the admin will allow
+view access to the changelist and detail pages for those models. If this is
+unwanted, you must change your custom permission codename.
 
 Miscellaneous
 -------------
@@ -376,6 +376,12 @@ Miscellaneous
 
 * The admin CSS class ``field-box`` is renamed to ``fieldBox`` to prevent
   conflicts with the class given to model fields named "box".
+
+* Since the admin's ``actions.html``, ``change_list_results.html``,
+  ``date_hierarchy.html``, ``pagination.html``, ``prepopulated_fields_js.html``,
+  ``search_form.html``, and ``submit_line.html`` templates can now be
+  overridden per app or per model, you may need to rename existing templates
+  with those names that were written for a different purpose.
 
 * ``QuerySet.raw()`` now caches its results like regular querysets. Use
   ``iterator()`` if you don't want caching.

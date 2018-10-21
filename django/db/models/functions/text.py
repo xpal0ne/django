@@ -22,13 +22,19 @@ class Chr(Transform):
     function = 'CHR'
     lookup_name = 'chr'
 
-    def as_mysql(self, compiler, connection):
+    def as_mysql(self, compiler, connection, **extra_context):
         return super().as_sql(
-            compiler, connection, function='CHAR', template='%(function)s(%(expressions)s USING utf16)'
+            compiler, connection, function='CHAR',
+            template='%(function)s(%(expressions)s USING utf16)',
+            **extra_context
         )
 
-    def as_oracle(self, compiler, connection):
-        return super().as_sql(compiler, connection, template='%(function)s(%(expressions)s USING NCHAR_CS)')
+    def as_oracle(self, compiler, connection, **extra_context):
+        return super().as_sql(
+            compiler, connection,
+            template='%(function)s(%(expressions)s USING NCHAR_CS)',
+            **extra_context
+        )
 
     def as_sqlite(self, compiler, connection, **extra_context):
         return super().as_sql(compiler, connection, function='CHAR', **extra_context)
@@ -41,16 +47,19 @@ class ConcatPair(Func):
     """
     function = 'CONCAT'
 
-    def as_sqlite(self, compiler, connection):
+    def as_sqlite(self, compiler, connection, **extra_context):
         coalesced = self.coalesce()
         return super(ConcatPair, coalesced).as_sql(
-            compiler, connection, template='%(expressions)s', arg_joiner=' || '
+            compiler, connection, template='%(expressions)s', arg_joiner=' || ',
+            **extra_context
         )
 
-    def as_mysql(self, compiler, connection):
+    def as_mysql(self, compiler, connection, **extra_context):
         # Use CONCAT_WS with an empty separator so that NULLs are ignored.
         return super().as_sql(
-            compiler, connection, function='CONCAT_WS', template="%(function)s('', %(expressions)s)"
+            compiler, connection, function='CONCAT_WS',
+            template="%(function)s('', %(expressions)s)",
+            **extra_context
         )
 
     def coalesce(self):
@@ -117,8 +126,8 @@ class Length(Transform):
     lookup_name = 'length'
     output_field = fields.IntegerField()
 
-    def as_mysql(self, compiler, connection):
-        return super().as_sql(compiler, connection, function='CHAR_LENGTH')
+    def as_mysql(self, compiler, connection, **extra_context):
+        return super().as_sql(compiler, connection, function='CHAR_LENGTH', **extra_context)
 
 
 class Lower(Transform):
@@ -130,7 +139,7 @@ class LPad(BytesToCharFieldConversionMixin, Func):
     function = 'LPAD'
 
     def __init__(self, expression, length, fill_text=Value(' '), **extra):
-        if not hasattr(length, 'resolve_expression') and length < 0:
+        if not hasattr(length, 'resolve_expression') and length is not None and length < 0:
             raise ValueError("'length' must be greater or equal to 0.")
         super().__init__(expression, length, fill_text, **extra)
 
@@ -156,13 +165,14 @@ class Repeat(BytesToCharFieldConversionMixin, Func):
     function = 'REPEAT'
 
     def __init__(self, expression, number, **extra):
-        if not hasattr(number, 'resolve_expression') and number < 0:
+        if not hasattr(number, 'resolve_expression') and number is not None and number < 0:
             raise ValueError("'number' must be greater or equal to 0.")
         super().__init__(expression, number, **extra)
 
     def as_oracle(self, compiler, connection, **extra_context):
         expression, number = self.source_expressions
-        rpad = RPad(expression, Length(expression) * number, expression)
+        length = None if number is None else Length(expression) * number
+        rpad = RPad(expression, length, expression)
         return rpad.as_sql(compiler, connection, **extra_context)
 
 
@@ -199,8 +209,8 @@ class StrIndex(Func):
     arity = 2
     output_field = fields.IntegerField()
 
-    def as_postgresql(self, compiler, connection):
-        return super().as_sql(compiler, connection, function='STRPOS')
+    def as_postgresql(self, compiler, connection, **extra_context):
+        return super().as_sql(compiler, connection, function='STRPOS', **extra_context)
 
 
 class Substr(Func):
@@ -220,11 +230,11 @@ class Substr(Func):
             expressions.append(length)
         super().__init__(*expressions, **extra)
 
-    def as_sqlite(self, compiler, connection):
-        return super().as_sql(compiler, connection, function='SUBSTR')
+    def as_sqlite(self, compiler, connection, **extra_context):
+        return super().as_sql(compiler, connection, function='SUBSTR', **extra_context)
 
-    def as_oracle(self, compiler, connection):
-        return super().as_sql(compiler, connection, function='SUBSTR')
+    def as_oracle(self, compiler, connection, **extra_context):
+        return super().as_sql(compiler, connection, function='SUBSTR', **extra_context)
 
 
 class Trim(Transform):

@@ -213,10 +213,11 @@ Use the ``django.test.Client`` class to make requests.
 
             name=fred&passwd=secret
 
-        If you provide ``content_type`` as :mimetype:`application/json`, a
-        ``data`` dictionary is serialized using :func:`json.dumps` with
-        :class:`~django.core.serializers.json.DjangoJSONEncoder`. You can
-        change the encoder by providing a ``json_encoder`` argument to
+        If you provide ``content_type`` as :mimetype:`application/json`, the
+        ``data`` is serialized using :func:`json.dumps` if it's a dict, list,
+        or tuple. Serialization is performed with
+        :class:`~django.core.serializers.json.DjangoJSONEncoder` by default,
+        and can be overridden by providing a ``json_encoder`` argument to
         :class:`Client`. This serialization also happens for :meth:`put`,
         :meth:`patch`, and :meth:`delete` requests.
 
@@ -225,6 +226,11 @@ Use the ``django.test.Client`` class to make requests.
             The JSON serialization described above was added. In older versions,
             you can call :func:`json.dumps` on ``data`` before passing it to
             ``post()`` to achieve the same thing.
+
+        .. versionchanged:: 2.2
+
+            The JSON serialization was extended to support lists and tuples. In
+            older versions, only dicts are serialized.
 
         If you provide any other ``content_type`` (e.g. :mimetype:`text/xml`
         for an XML payload), the contents of ``data`` are sent as-is in the
@@ -1276,6 +1282,23 @@ The decorator can also be applied to test case classes::
     find that the original test case classes are still equally affected by the
     decorator. For a given class, :func:`~django.test.modify_settings` is
     always applied after :func:`~django.test.override_settings`.
+
+.. admonition:: Considerations with Python 3.5
+
+    If using Python 3.5 (or older, if using an older version of Django), avoid
+    mixing  ``remove`` with ``append`` and ``prepend`` in
+    :func:`~django.test.modify_settings`. In some cases it matters whether a
+    value is first added and then removed or vice versa, and dictionary key
+    order isn't preserved until Python 3.6. Instead, apply the decorator twice
+    to guarantee the order of operations. For example, to ensure that
+    ``SessionMiddleware`` appears first in ``MIDDLEWARE``::
+
+        @modify_settings(MIDDLEWARE={
+            'remove': ['django.contrib.sessions.middleware.SessionMiddleware'],
+        )
+        @modify_settings(MIDDLEWARE={
+            'prepend': ['django.contrib.sessions.middleware.SessionMiddleware'],
+        })
 
 .. warning::
 

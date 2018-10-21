@@ -6,9 +6,6 @@ A clean, elegant URL scheme is an important detail in a high-quality Web
 application. Django lets you design URLs however you want, with no framework
 limitations.
 
-There's no ``.php`` or ``.cgi`` required, and certainly none of that
-``0,2097,1-1-1928,00`` nonsense.
-
 See `Cool URIs don't change`_, by World Wide Web creator Tim Berners-Lee, for
 excellent arguments on why URLs should be clean and usable.
 
@@ -761,8 +758,8 @@ and one called ``'publisher-polls'``. Assume we have enhanced that application
 so that it takes the instance namespace into consideration when creating and
 displaying polls.
 
-.. snippet::
-    :filename: urls.py
+.. code-block:: python
+    :caption: urls.py
 
     from django.urls import include, path
 
@@ -771,8 +768,8 @@ displaying polls.
         path('publisher-polls/', include('polls.urls', namespace='publisher-polls')),
     ]
 
-.. snippet::
-    :filename: polls/urls.py
+.. code-block:: python
+    :caption: polls/urls.py
 
     from django.urls import path
 
@@ -830,8 +827,8 @@ at the same level as the ``urlpatterns`` attribute. You have to pass the actual
 module, or a string reference to the module, to :func:`~django.urls.include`,
 not the list of ``urlpatterns`` itself.
 
-.. snippet::
-    :filename: polls/urls.py
+.. code-block:: python
+    :caption: polls/urls.py
 
     from django.urls import path
 
@@ -844,8 +841,8 @@ not the list of ``urlpatterns`` itself.
         ...
     ]
 
-.. snippet::
-    :filename: urls.py
+.. code-block:: python
+    :caption: urls.py
 
     from django.urls import include, path
 

@@ -20,6 +20,11 @@ from .models import UnicodeModel, UnserializableModel
 from .routers import TestRouter
 from .test_base import MigrationTestBase
 
+try:
+    import sqlparse
+except ImportError:
+    sqlparse = None
+
 
 class MigrateTests(MigrationTestBase):
     """
@@ -41,7 +46,7 @@ class MigrateTests(MigrationTestBase):
         call_command('migrate', 'migrations', '0001', verbosity=1, stdout=stdout, no_color=True)
         stdout = stdout.getvalue()
         self.assertIn('Target specific migration: 0001_initial, from migrations', stdout)
-        self.assertIn('Applying migrations.0001_initial... OK', stdout)
+        self.assertIn('Applying migrations.0001_initial… OK', stdout)
         # The correct tables exist
         self.assertTableExists("migrations_author")
         self.assertTableExists("migrations_tribble")
@@ -57,7 +62,7 @@ class MigrateTests(MigrationTestBase):
         call_command('migrate', 'migrations', 'zero', verbosity=1, stdout=stdout, no_color=True)
         stdout = stdout.getvalue()
         self.assertIn('Unapply all migrations: migrations', stdout)
-        self.assertIn('Unapplying migrations.0002_second... OK', stdout)
+        self.assertIn('Unapplying migrations.0002_second… OK', stdout)
         # Tables are gone
         self.assertTableNotExists("migrations_author")
         self.assertTableNotExists("migrations_tribble")
@@ -157,7 +162,7 @@ class MigrateTests(MigrationTestBase):
             call_command("migrate", "migrations", "0001", fake_initial=True, stdout=out, verbosity=1)
             call_command("migrate", "migrations", "0001", fake_initial=True, verbosity=0, database="other")
         self.assertIn(
-            "migrations.0001_initial... faked",
+            "migrations.0001_initial… faked",
             out.getvalue().lower()
         )
         # Run migrations all the way
@@ -208,8 +213,8 @@ class MigrateTests(MigrationTestBase):
         with mock.patch('django.core.management.color.supports_color', lambda *args: False):
             call_command("migrate", "migrations", "0002", fake_initial=True, stdout=out, verbosity=1)
         value = out.getvalue().lower()
-        self.assertIn("migrations.0001_initial... faked", value)
-        self.assertIn("migrations.0002_second... faked", value)
+        self.assertIn("migrations.0001_initial… faked", value)
+        self.assertIn("migrations.0002_second… faked", value)
         # Fake an apply
         call_command("migrate", "migrations", fake=True, verbosity=0)
         # Unmigrate everything
@@ -271,8 +276,8 @@ class MigrateTests(MigrationTestBase):
         call_command("showmigrations", format='plan', stdout=out, verbosity=2)
         self.assertEqual(
             "[ ]  migrations.0001_initial\n"
-            "[ ]  migrations.0003_third ... (migrations.0001_initial)\n"
-            "[ ]  migrations.0002_second ... (migrations.0001_initial, migrations.0003_third)\n",
+            "[ ]  migrations.0003_third … (migrations.0001_initial)\n"
+            "[ ]  migrations.0002_second … (migrations.0001_initial, migrations.0003_third)\n",
             out.getvalue().lower()
         )
         call_command("migrate", "migrations", "0003", verbosity=0)
@@ -290,8 +295,8 @@ class MigrateTests(MigrationTestBase):
         call_command("showmigrations", format='plan', stdout=out, verbosity=2)
         self.assertEqual(
             "[x]  migrations.0001_initial\n"
-            "[x]  migrations.0003_third ... (migrations.0001_initial)\n"
-            "[ ]  migrations.0002_second ... (migrations.0001_initial, migrations.0003_third)\n",
+            "[x]  migrations.0003_third … (migrations.0001_initial)\n"
+            "[ ]  migrations.0002_second … (migrations.0001_initial, migrations.0003_third)\n",
             out.getvalue().lower()
         )
 
@@ -311,10 +316,10 @@ class MigrateTests(MigrationTestBase):
             '    Raw Python operation -> Grow salamander tail.\n'
             'migrations.0002_second\n'
             '    Create model Book\n'
-            '    Raw SQL operation -> SELECT * FROM migrations_book\n'
+            "    Raw SQL operation -> ['SELECT * FROM migrations_book']\n"
             'migrations.0003_third\n'
             '    Create model Author\n'
-            '    Raw SQL operation -> SELECT * FROM migrations_author\n',
+            "    Raw SQL operation -> ['SELECT * FROM migrations_author']\n",
             out.getvalue()
         )
         # Migrate to the third migration.
@@ -334,10 +339,10 @@ class MigrateTests(MigrationTestBase):
             'Planned operations:\n'
             'migrations.0003_third\n'
             '    Undo Create model Author\n'
-            '    Raw SQL operation -> SELECT * FROM migrations_book\n'
+            "    Raw SQL operation -> ['SELECT * FROM migrations_book']\n"
             'migrations.0002_second\n'
             '    Undo Create model Book\n'
-            '    Raw SQL operation -> SELECT * FROM migrations_salamander\n',
+            "    Raw SQL operation -> ['SELECT * FROM migrations_salamand…\n",
             out.getvalue()
         )
         out = io.StringIO()
@@ -349,21 +354,35 @@ class MigrateTests(MigrationTestBase):
             '    Raw SQL operation -> SELECT * FROM migrations_author WHE…\n',
             out.getvalue()
         )
-        # Migrate to the fourth migration.
-        call_command('migrate', 'migrations', '0004', verbosity=0)
-        out = io.StringIO()
         # Show the plan when an operation is irreversible.
-        call_command('migrate', 'migrations', '0003', plan=True, stdout=out, no_color=True)
-        self.assertEqual(
-            'Planned operations:\n'
-            'migrations.0004_fourth\n'
-            '    Raw SQL operation -> IRREVERSIBLE\n',
-            out.getvalue()
-        )
-        # Cleanup by unmigrating everything: fake the irreversible, then
-        # migrate all to zero.
-        call_command('migrate', 'migrations', '0003', fake=True, verbosity=0)
+        # Migration 0004's RunSQL uses a SQL string instead of a list, so
+        # sqlparse may be required for splitting.
+        if sqlparse or not connection.features.requires_sqlparse_for_splitting:
+            # Migrate to the fourth migration.
+            call_command('migrate', 'migrations', '0004', verbosity=0)
+            out = io.StringIO()
+            call_command('migrate', 'migrations', '0003', plan=True, stdout=out, no_color=True)
+            self.assertEqual(
+                'Planned operations:\n'
+                'migrations.0004_fourth\n'
+                '    Raw SQL operation -> IRREVERSIBLE\n',
+                out.getvalue()
+            )
+            # Cleanup by unmigrating everything: fake the irreversible, then
+            # migrate all to zero.
+            call_command('migrate', 'migrations', '0003', fake=True, verbosity=0)
         call_command('migrate', 'migrations', 'zero', verbosity=0)
+
+    @override_settings(MIGRATION_MODULES={'migrations': 'migrations.test_migrations_empty'})
+    def test_showmigrations_no_migrations(self):
+        out = io.StringIO()
+        call_command('showmigrations', stdout=out, no_color=True)
+        self.assertEqual('migrations\n (no migrations)\n', out.getvalue().lower())
+
+    @override_settings(INSTALLED_APPS=['migrations.migrations_test_apps.unmigrated_app'])
+    def test_showmigrations_unmigrated_app(self):
+        with self.assertRaisesMessage(CommandError, 'No migrations present for: unmigrated_app'):
+            call_command('showmigrations', 'unmigrated_app')
 
     @override_settings(MIGRATION_MODULES={"migrations": "migrations.test_migrations_empty"})
     def test_showmigrations_plan_no_migrations(self):
@@ -398,10 +417,10 @@ class MigrateTests(MigrationTestBase):
         call_command("showmigrations", format='plan', stdout=out, verbosity=2)
         self.assertEqual(
             "[ ]  migrations.1_auto\n"
-            "[ ]  migrations.2_auto ... (migrations.1_auto)\n"
-            "[ ]  migrations.3_squashed_5 ... (migrations.2_auto)\n"
-            "[ ]  migrations.6_auto ... (migrations.3_squashed_5)\n"
-            "[ ]  migrations.7_auto ... (migrations.6_auto)\n",
+            "[ ]  migrations.2_auto … (migrations.1_auto)\n"
+            "[ ]  migrations.3_squashed_5 … (migrations.2_auto)\n"
+            "[ ]  migrations.6_auto … (migrations.3_squashed_5)\n"
+            "[ ]  migrations.7_auto … (migrations.6_auto)\n",
             out.getvalue().lower()
         )
 
@@ -422,10 +441,10 @@ class MigrateTests(MigrationTestBase):
         call_command("showmigrations", format='plan', stdout=out, verbosity=2)
         self.assertEqual(
             "[x]  migrations.1_auto\n"
-            "[x]  migrations.2_auto ... (migrations.1_auto)\n"
-            "[x]  migrations.3_squashed_5 ... (migrations.2_auto)\n"
-            "[ ]  migrations.6_auto ... (migrations.3_squashed_5)\n"
-            "[ ]  migrations.7_auto ... (migrations.6_auto)\n",
+            "[x]  migrations.2_auto … (migrations.1_auto)\n"
+            "[x]  migrations.3_squashed_5 … (migrations.2_auto)\n"
+            "[ ]  migrations.6_auto … (migrations.3_squashed_5)\n"
+            "[ ]  migrations.7_auto … (migrations.6_auto)\n",
             out.getvalue().lower()
         )
 
@@ -659,7 +678,7 @@ class MigrateTests(MigrationTestBase):
             self.assertGreater(len(execute.mock_calls), 2)
         stdout = stdout.getvalue()
         self.assertIn('Synchronize unmigrated apps: unmigrated_app_syncdb', stdout)
-        self.assertIn('Creating tables...', stdout)
+        self.assertIn('Creating tables…', stdout)
         table_name = truncate_name('unmigrated_app_syncdb_classroom', connection.ops.max_name_length())
         self.assertIn('Creating table %s' % table_name, stdout)
 

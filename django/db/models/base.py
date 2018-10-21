@@ -28,7 +28,6 @@ from django.db.models.signals import (
     class_prepared, post_init, post_save, pre_init, pre_save,
 )
 from django.db.models.utils import make_model_tuple
-from django.utils.encoding import force_text
 from django.utils.text import capfirst, get_text_list
 from django.utils.translation import gettext_lazy as _
 from django.utils.version import get_version
@@ -750,7 +749,12 @@ class Model(metaclass=ModelBase):
                 sender=origin, instance=self, raw=raw, using=using,
                 update_fields=update_fields,
             )
-        with transaction.atomic(using=using, savepoint=False):
+        # A transaction isn't needed if one query is issued.
+        if meta.parents:
+            context_manager = transaction.atomic(using=using, savepoint=False)
+        else:
+            context_manager = transaction.mark_for_rollback_on_error(using=using)
+        with context_manager:
             parent_inserted = False
             if not raw:
                 parent_inserted = self._save_parents(cls, using, update_fields)
@@ -902,7 +906,7 @@ class Model(metaclass=ModelBase):
 
     def _get_FIELD_display(self, field):
         value = getattr(self, field.attname)
-        return force_text(dict(field.flatchoices).get(value, value), strings_only=True)
+        return dict(field.flatchoices).get(value, value)
 
     def _get_next_or_previous_by_FIELD(self, field, is_next, **kwargs):
         if not self.pk:
@@ -1301,12 +1305,13 @@ class Model(metaclass=ModelBase):
         fields = (f for f in fields if isinstance(f.remote_field.through, ModelBase))
 
         for f in fields:
-            signature = (f.remote_field.model, cls, f.remote_field.through)
+            signature = (f.remote_field.model, cls, f.remote_field.through, f.remote_field.through_fields)
             if signature in seen_intermediary_signatures:
                 errors.append(
                     checks.Error(
-                        "The model has two many-to-many relations through "
-                        "the intermediate model '%s'." % f.remote_field.through._meta.label,
+                        "The model has two identical many-to-many relations "
+                        "through the intermediate model '%s'." %
+                        f.remote_field.through._meta.label,
                         obj=cls,
                         id='models.E003',
                     )

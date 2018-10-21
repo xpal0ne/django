@@ -159,11 +159,11 @@ class Now(Func):
     template = 'CURRENT_TIMESTAMP'
     output_field = fields.DateTimeField()
 
-    def as_postgresql(self, compiler, connection):
+    def as_postgresql(self, compiler, connection, **extra_context):
         # PostgreSQL's CURRENT_TIMESTAMP means "the time at the start of the
         # transaction". Use STATEMENT_TIMESTAMP to be cross-compatible with
         # other databases.
-        return self.as_sql(compiler, connection, template='STATEMENT_TIMESTAMP()')
+        return self.as_sql(compiler, connection, template='STATEMENT_TIMESTAMP()', **extra_context)
 
 
 class TruncBase(TimezoneMixin, Transform):
@@ -218,16 +218,20 @@ class TruncBase(TimezoneMixin, Transform):
 
     def convert_value(self, value, expression, connection):
         if isinstance(self.output_field, DateTimeField):
-            if settings.USE_TZ:
-                if value is None:
-                    raise ValueError(
-                        "Database returned an invalid datetime value. "
-                        "Are time zone definitions for your database installed?"
-                    )
+            if not settings.USE_TZ:
+                pass
+            elif value is not None:
                 value = value.replace(tzinfo=None)
                 value = timezone.make_aware(value, self.tzinfo)
+            elif not connection.features.has_zoneinfo_database:
+                raise ValueError(
+                    'Database returned an invalid datetime value. Are time '
+                    'zone definitions for your database installed?'
+                )
         elif isinstance(value, datetime):
-            if isinstance(self.output_field, DateField):
+            if value is None:
+                pass
+            elif isinstance(self.output_field, DateField):
                 value = value.date()
             elif isinstance(self.output_field, TimeField):
                 value = value.time()
